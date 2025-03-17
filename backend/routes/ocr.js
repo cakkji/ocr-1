@@ -1,3 +1,4 @@
+//ocr.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
@@ -8,20 +9,28 @@ const fs = require('fs');
 const upload = multer({ dest: 'uploads/' });
 
 router.post('/upload', upload.single('file'), async (req, res) => {
+  console.log("📥 [Express] ได้รับไฟล์จาก Quasar:", req.file);
+
+  // ✅ ตรวจ path ของไฟล์ที่ Multer เซฟไว้
+  console.log("🛠 Path ที่จะส่ง:", req.file?.path);
+
   const form = new FormData();
   form.append('file', fs.createReadStream(req.file.path));
 
   try {
-    const response = await axios.post('http://localhost:8000/ocr', form, {
+    console.log("🚀 กำลังส่งต่อไป FastAPI /ocr...");
+    const response = await axios.post('http://localhost:8001/ocr', form, {
       headers: form.getHeaders()
     });
 
-    res.json(response.data); // ✅ ส่ง response กลับให้ frontend
+    console.log('📦 Response from FastAPI:', response.data);
+    res.json(response.data);
   } catch (err) {
     console.error('❌ OCR proxy error:', err.message);
     res.status(500).json({ error: 'OCR failed', detail: err.message });
   }
 });
+
 
 // 📦 เพิ่มหลัง route /upload
 router.post('/approve', (req, res) => {
@@ -36,6 +45,15 @@ router.post('/approve', (req, res) => {
   // ✅ ส่งกลับว่า success
   res.json({ status: 'approved' })
 })
+
+const checkUrlValid = async (url) => {
+  try {
+    const res = await axios.head(url);
+    return res.status === 200;
+  } catch {
+    return false;
+  }
+}
 
 
 module.exports = router;

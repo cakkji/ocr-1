@@ -17,7 +17,7 @@
         <q-markup-table>
           <tbody>
             <tr>
-              <td><b>ชื่อ 555</b></td>
+              <td><b>ชื่อนิสิต</b></td>
               <td>{{ ocrResult.student_name }}</td>
             </tr>
             <tr>
@@ -25,13 +25,54 @@
               <td>{{ ocrResult.course_name }}</td>
             </tr>
             <tr>
-              <td><b>วันที่จบ</b></td>
+              <td><b>วันที่</b></td>
               <td>{{ ocrResult.date }}</td>
+            </tr>
+            <tr v-if="ocrResult.url">
+              <td><b>ลิงก์ Certificate</b></td>
+              <td>
+                <a :href="ocrResult.url" target="_blank">{{ ocrResult.url }}</a>
+              </td>
             </tr>
           </tbody>
         </q-markup-table>
 
-        <q-btn label="อนุมัติ" color="primary" :loading="loading" @click="approve" />
+        <!-- หมายเหตุผลการตรวจสอบ -->
+        <div class="q-mt-sm">
+          <q-banner
+            v-if="ocrResult.verified"
+            class="bg-green-2 text-green-9"
+            rounded
+            icon="check_circle"
+          >
+            ✔️ ข้อมูลในใบประกาศ <b>ตรงกับข้อมูลใน URL</b>
+          </q-banner>
+
+          <q-banner
+            v-else-if="ocrResult.url && !ocrResult.verified"
+            class="bg-orange-2 text-orange-10"
+            rounded
+            icon="warning"
+          >
+            ⚠️ ข้อมูลในใบที่อัปโหลด <b>ไม่ตรงกับใน URL</b> เช่น ชื่อหรือชื่อวิชาแตกต่าง
+            <div v-if="ocrResult.verify_note" class="q-mt-xs text-caption">
+              หมายเหตุ: {{ ocrResult.verify_note }}
+            </div>
+          </q-banner>
+
+          <q-banner v-else class="bg-red-2 text-red-10" rounded icon="error">
+            ❌ ไม่สามารถตรวจสอบกับ URL ได้ (อาจไม่มี URL หรือลิงก์ไม่เปิด)
+          </q-banner>
+        </div>
+
+        <q-btn
+          label="อนุมัติ"
+          color="primary"
+          :loading="loading"
+          :disable="loading || !ocrResult"
+          @click="approve"
+          class="q-mt-md"
+        />
       </q-card-section>
     </q-card>
   </q-page>
@@ -44,35 +85,21 @@ import { api } from 'boot/axios'
 const ocrResult = ref(null)
 const loading = ref(false)
 
-/*function parseDonutResult(raw) {
-  const name = raw.match(/<s_name>(.*?)<\/s_name>/)?.[1] || ''
-  const course = raw.match(/<s_course>(.*?)<\/s_course>/)?.[1] || ''
-  const date = raw.match(/<s_date>(.*?)<\/s_date>/)?.[1] || ''
-  return { name, course, date }
-}*/
-
 function onUploaded({ xhr }) {
   const res = JSON.parse(xhr.response)
-
   console.log('📦 RAW:', res)
-
-  const parsed = res.data // ✅ รับข้อมูลจาก FastAPI
+  const parsed = res.data
   console.log('✅ Parsed:', parsed)
-
   ocrResult.value = parsed
 }
 
 function approve() {
   loading.value = true
-
-  // 🔥 แก้ตรงนี้
   const payload = JSON.parse(JSON.stringify(ocrResult.value))
-
   console.log('📥 ข้อมูลที่จะส่งไป backend:', payload)
 
   api
-    .post('/ocr/approve', payload) // ✅ ถูกต้อง
-
+    .post('/ocr/approve', payload)
     .then(() => {
       alert('✅ เพิ่มชั่วโมงสำเร็จ!')
     })
