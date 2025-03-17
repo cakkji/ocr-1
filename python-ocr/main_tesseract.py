@@ -10,7 +10,8 @@ from fuzzywuzzy import fuzz, process
 import requests
 from bs4 import BeautifulSoup
 
-pytesseract.pytesseract.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+# เปลี่ยนตาม OS ถ้าใช้บน Ubuntu ไม่ต้องเซ็ต path
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 app = FastAPI()
 
@@ -25,39 +26,16 @@ course_db = {
     "ภาษาอังกฤษเพื่อการสื่อสาร (English for Communication)": 10,
     "Experiential English": 12,
     "การประยุกต์ใช้ Generative AI ในการทำงาน": 15,
+    "การประยุกต์ใช้ Collaboration tools ในการเพิ่มประสิทธิภาพในการทำงานและประสานงานภายในองค์กร": 14,
+    "Data Visualization with Tableau Desktop": 14
+    
 }
 
 def validate_url(url: str) -> bool:
     try:
         response = requests.head(url, timeout=5)
         return response.status_code == 200
-    except requests.RequestException:
-        return False
-
-def compare_with_url_data(url, ocr_name, ocr_course):
-    try:
-        response = requests.get(url, timeout=5)
-        if response.status_code != 200:
-            print("❌ ไม่สามารถเข้าถึง URL ได้")
-            return False
-
-        html = response.text
-        soup = BeautifulSoup(html, "html.parser")
-        text = soup.get_text(separator="\n")
-        print("🌐 Raw text จาก URL:\n", text)
-
-        name_match = fuzz.partial_ratio(ocr_name.lower(), text.lower()) > 99
-        course_match = fuzz.partial_ratio(ocr_course.lower(), text.lower()) > 99
-
-        if name_match and course_match:
-            print("✅ ข้อมูลตรงกับ URL จริง (ชื่อ + วิชา)")
-            return True
-        else:
-            print("❌ ข้อมูลไม่ตรงกับ URL (อาจปลอม/ผิด)")
-            return False
-
-    except Exception as e:
-        print("❌ เกิดข้อผิดพลาดในการตรวจสอบ URL:", str(e))
+    except:
         return False
 
 def clean_text(text):
@@ -72,6 +50,34 @@ def fuzzy_match_course_name(course_raw):
         return list(course_db.keys())[cleaned_keys.index(best_match)]
     return course_raw
 
+def extract_course_from_url_text(text: str):
+    lines = text.split("\n")
+    found = ""
+    for line in lines:
+        if "collaboration" in line.lower() or "การประยุกต์ใช้" in line:
+            found += line.strip() + " "
+    return found.strip()
+
+def compare_with_url_data(url, ocr_name, ocr_course):
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code != 200:
+            return False, "", ""
+
+        html = response.text
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(separator="\n")
+        print("🌐 Raw text จาก URL:\n", text)
+
+        name_match = fuzz.partial_ratio(ocr_name.lower(), text.lower()) > 90
+        course_from_url = extract_course_from_url_text(text)
+        course_match = fuzz.partial_ratio(ocr_course.lower(), course_from_url.lower()) > 90
+
+        return name_match and course_match, course_from_url, text
+    except Exception as e:
+        print("❌ Error checking URL:", e)
+        return False, "", ""
+
 def extract_url_from_image(image: Image.Image):
     width, height = image.size
     cropped = image.crop((0, int(height * 0.92), int(width * 0.5), height))
@@ -79,86 +85,72 @@ def extract_url_from_image(image: Image.Image):
     cropped = cropped.convert("L")
     cropped = cropped.point(lambda x: 0 if x < 180 else 255, '1')
     cropped = cropped.filter(ImageFilter.SHARPEN)
-    cropped.save("debug_url_zone.png")
 
     config = "--psm 7 --oem 3"
     text = pytesseract.image_to_string(cropped, lang="eng", config=config)
-    print("🧾 OCR URL zone:", repr(text))
 
     cleaned = text.replace(" ", "").replace("|", "").replace("\n", "").strip()
     cleaned = re.sub(r'O', '0', cleaned)
     cleaned = re.sub(r'¢', 'c', cleaned)
-    
-    print("🧹 Cleaned:", cleaned)
 
     base_match = re.search(r'(https?://[a-zA-Z0-9./_\-]+/certificates/)', cleaned)
     uuid_parts = re.findall(r'[a-fA-F0-9]{4,}', cleaned)
     joined_uuid = ''.join(uuid_parts)
 
     if base_match and len(joined_uuid) >= 32:
-        final_url = base_match.group(1) + joined_uuid[:32]
-        print("✅ Final Cleaned URL:", final_url)
-        return final_url
-    else:
-        print("❌ ไม่พบ base URL หรือ UUID")
-        return ""
+        return base_match.group(1) + joined_uuid[:32]
+    return ""
 
 def extract_fields_from_image(image: Image.Image):
     text = pytesseract.image_to_string(image, lang="eng+tha")
-    print("🧠 OCR Full Text:\n", text)
 
+    # OCR จาก full text
     direct_url_match = re.search(r'https?://[^\s]+', text)
-    direct_url = direct_url_match.group(0) if direct_url_match else ""
-    direct_url = re.sub(r'O', '0', direct_url)
-    print("🔍 URL (จาก full text):", direct_url)
+    direct_url = re.sub(r'O', '0', direct_url_match.group(0)) if direct_url_match else ""
 
-    if validate_url(direct_url):
-        final_url = direct_url
-        print("✅ ใช้ลิงก์จาก full text OCR ได้เลย:", final_url)
-    else:
-        print("❌ ลิงก์จาก full text ใช้ไม่ได้ ลอง OCR จากล่างสุดแทน")
-        final_url = extract_url_from_image(image)
+    final_url = direct_url if validate_url(direct_url) else extract_url_from_image(image)
 
     name_match = re.search(r"presented to\s+(.+)", text)
     student_name = name_match.group(1).strip() if name_match else ""
 
-    course_match = re.search(r"completed the Open Online Course\s+(.+)", text)
-    course_raw = course_match.group(1).strip() if course_match else ""
+    # รวมหลายบรรทัดเป็นชื่อวิชา
+    course_lines = re.findall(r"completed the Open Online Course\s+(.+)", text)
+    course_raw = course_lines[0].strip() if course_lines else ""
+    course_raw += "\n" + "\n".join(re.findall(r"^[\u0E00-\u0E7F\sA-Za-z0-9]+$", text, re.MULTILINE))
+
+    course_raw = course_raw.strip()
     course_name = fuzzy_match_course_name(course_raw)
 
     date_match = re.search(r"On\s+([A-Za-z]+\s+\d{1,2},\s+\d{4})", text)
     course_date = date_match.group(1).strip() if date_match else ""
 
-    # ✅ เปรียบเทียบกับข้อมูลในหน้า URL (ถ้ามี)
-    match_with_url = compare_with_url_data(final_url, student_name, course_name)
-    print("🧾 เปรียบเทียบกับ URL:", match_with_url)
+    verified, url_course, _ = compare_with_url_data(final_url, student_name, course_name)
 
-    fields = {
+    # ถ้า course OCR เพี้ยนเกินไป → ใช้ course จากหน้าเว็บแทน
+    if not verified and url_course:
+        score = fuzz.partial_ratio(course_name.lower(), url_course.lower())
+        if score < 60:
+            print("⚠️ เปลี่ยนชื่อวิชาจาก URL:", url_course)
+            course_name = url_course
+
+    return {
         "student_name": student_name,
         "course_name": course_name,
         "date": course_date,
         "url": final_url,
-        "verified": match_with_url
+        "verified": verified
     }
-
-    print("✅ Fields Extracted:", fields)
-    return fields
 
 @app.post("/ocr")
 async def ocr_certificate(file: UploadFile = File(...)):
-    print("🚀 [FastAPI] เรียก /ocr แล้ว")
     filename = file.filename.lower()
     contents = await file.read()
-    print("📥 ได้รับไฟล์:", filename)
 
     if filename.endswith(".pdf"):
-        print("📄 แปลง PDF เป็นภาพ...")
         images = convert_from_bytes(contents, dpi=400)
         image = images[0]
     else:
-        print("🖼️ โหลดภาพโดยตรง...")
         image = Image.open(io.BytesIO(contents))
 
-    print("🔍 เริ่ม OCR...")
     fields = extract_fields_from_image(image)
     return {"status": "success", "data": fields}
