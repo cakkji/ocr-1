@@ -17,19 +17,21 @@
         <q-markup-table>
           <tbody>
             <tr>
-              <td><b>ชื่อนิสิต</b></td>
+              <td class="text-bold">👤 ชื่อนิสิต</td>
               <td>{{ ocrResult.student_name }}</td>
             </tr>
             <tr>
-              <td><b>วิชา</b></td>
-              <td>{{ ocrResult.course_name }}</td>
+              <td class="text-bold">📘 วิชา</td>
+              <td style="white-space: pre-line">
+                {{ formatCourseName(ocrResult.course_name) }}
+              </td>
             </tr>
             <tr>
-              <td><b>วันที่</b></td>
+              <td class="text-bold">🗓️ วันที่</td>
               <td>{{ ocrResult.date }}</td>
             </tr>
             <tr v-if="ocrResult.url">
-              <td><b>ลิงก์ Certificate</b></td>
+              <td class="text-bold">🔗 ลิงก์ Certificate</td>
               <td>
                 <a :href="ocrResult.url" target="_blank">{{ ocrResult.url }}</a>
               </td>
@@ -84,6 +86,14 @@ import { api } from 'boot/axios'
 
 const ocrResult = ref(null)
 const loading = ref(false)
+
+function formatCourseName(raw) {
+  if (!raw) return ''
+  return raw
+    .replace(/([ก-๙])\s(?=[ก-๙])/g, '$1') // ลบ space ระหว่างพยัญชนะไทย
+    .replace(/\s{2,}/g, ' ') // ลบ space ซ้ำ
+    .trim()
+}
 
 function onUploaded({ xhr }) {
   const res = JSON.parse(xhr.response)
