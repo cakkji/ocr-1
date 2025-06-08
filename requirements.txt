@@ -1,3 +1,23 @@
-spacy>=3.0.0,<4.0.0
-faker
-transformers
+# spacy>=3.0.0,<4.0.0
+# faker
+# transformers
+
+
+# pip install transformers pythainlp
+# pip install paddleocr paddlepaddle
+
+
+# pip install transformers datasets sentencepiece
+# pip install torch
+
+fastapi>=0.104.1
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+easyocr>=1.7.1
+Pillow>=11.2.1
+numpy>=1.24.3
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.21.1
+requests>=2.31.0
+
+pytesseract>=0.3.13
